@@ -42,7 +42,7 @@ load_dotenv(Path(__file__).parent / ".env")
 URL = os.getenv("PAGE_URL", "https://www.qatarairways.com/en/travel-alerts.html")
 SNAPSHOT_FILE = Path("previous_snapshot.txt")
 SCREENSHOT_DIR = Path("screenshots")
-MODEL = "gpt-5.2"
+MODEL = "gpt-5.4"
 REASONING_EFFORT = "high"
 
 logging.basicConfig(

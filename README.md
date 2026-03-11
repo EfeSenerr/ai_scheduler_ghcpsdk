@@ -39,7 +39,7 @@ The agent is constructed via a single `create_session()` call:
 
 ```python
 session = await client.create_session({
-    "model": "gpt-5.2",
+    "model": "4",
     "reasoning_effort": "high",
     "streaming": True,
     "tools": [CompareContentOfPage, SendMailTo, ReportResult],
