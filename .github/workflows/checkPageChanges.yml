@@ -2,8 +2,8 @@ name: Page Change Checker
 
 on:
   schedule:
-    # Runs every hour
-    - cron: "0 * * * *"
+    # Runs every day at 9 AM
+    - cron: "0 9 * * *"
   workflow_dispatch: # Allow manual trigger
 
 permissions:
@@ -54,6 +54,7 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          PAGE_URL: ${{ secrets.PAGE_URL }}
         run: python checkPageChanges.py
 
       - name: Commit snapshot to data branch
