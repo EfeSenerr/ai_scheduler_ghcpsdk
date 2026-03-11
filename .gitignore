@@ -4,3 +4,4 @@ __pycache__/
 screenshots/
 architecture.excalidraw
 .github/skills/excalidraw-diagram/
+node_modules/
