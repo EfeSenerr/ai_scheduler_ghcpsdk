@@ -5,3 +5,7 @@ screenshots/
 architecture.excalidraw
 .github/skills/excalidraw-diagram/
 node_modules/
+build/
+dist/
+*.spec
+*.exe
