@@ -1,6 +1,6 @@
-# 🤖 Page Change Checker
+# 🤖 AI Scheduler — Multi-Page Change Monitor
 
-An autonomous AI agent that monitors any webpage for content changes and sends email notifications with screenshots when differences are detected.
+An autonomous AI agent that monitors **multiple webpages** for content changes and sends email notifications with screenshots when differences are detected.
 
 Built with the **GitHub Copilot SDK**, **Playwright MCP**, and **GitHub Actions** — the entire agent runs serverlessly on a cron schedule with zero infrastructure to manage.
 
@@ -9,23 +9,27 @@ Built with the **GitHub Copilot SDK**, **Playwright MCP**, and **GitHub Actions*
 ## How It Works
 
 ```
-GitHub Actions (cron every 5 min)
+GitHub Actions (daily cron) or local .exe
   │
   ▼
-┌─────────────────────────────────────────────┐
-│  Copilot SDK Agent (gpt-5.2)                │
-│                                             │
-│  1. web_fetch → get page content            │
-│  2. CompareContentOfPage → SHA-256 diff     │
-│  3. Decision: changed?                      │
-│  4. Playwright MCP → full-page screenshot   │
-│  5. SendMailTo → SMTP email + attachment    │
-│  6. ReportResult → structured output        │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│  For each page in pages.json:                   │
+│                                                 │
+│  Copilot SDK Session (gpt-5.4)                  │
+│                                                 │
+│  1. web_fetch → get page content                │
+│  2. CompareContentOfPage → SHA-256 diff         │
+│  3. Decision: changed?                          │
+│  4. Playwright MCP → full-page screenshot       │
+│  5. SendMailTo → SMTP email + attachment        │
+│  6. ReportResult → structured output            │
+└─────────────────────────────────────────────────┘
   │
   ▼
-Snapshot persisted on `data` branch
+Per-page snapshots persisted on `data` branch
 ```
+
+Pages are configured in `pages.json`. Each page gets its own Copilot session, snapshot file (`snapshots/{id}.txt`), and per-page screenshot. The agent iterates through all enabled pages sequentially.
 
 The AI agent **reasons through** a structured prompt and decides autonomously whether changes are meaningful (ignoring whitespace-only diffs). When real content changes are found, it takes a screenshot of the page via a headless browser, summarizes the diff, and emails the notification.
 
@@ -35,23 +39,28 @@ The AI agent **reasons through** a structured prompt and decides autonomously wh
 
 ### Copilot SDK
 
-The agent is constructed via a single `create_session()` call:
+For each page, the agent creates a dedicated session with per-page tools:
 
 ```python
-session = await client.create_session({
-    "model": "4",
-    "reasoning_effort": "high",
-    "streaming": True,
-    "tools": [CompareContentOfPage, SendMailTo, ReportResult],
-    "mcp_servers": {
-        "playwright": {
-            "type": "local",
-            "command": "npx",
-            "args": ["-y", "@playwright/mcp@latest", "--headless", "--output-dir", ...],
-            "tools": ["browser_navigate", "browser_take_screenshot"],
+for page in load_pages():
+    compare_tool = make_compare_tool(page["id"])   # bound to snapshots/{id}.txt
+    sendmail_tool = make_sendmail_tool(page["id"])  # looks for screenshots/{id}.png
+
+    session = await client.create_session({
+        "model": "gpt-5.4",
+        "reasoning_effort": "high",
+        "streaming": True,
+        "tools": [compare_tool, sendmail_tool, ReportResult],
+        "mcp_servers": {
+            "playwright": {
+                "type": "local",
+                "command": "npx",
+                "args": ["-y", "@playwright/mcp@latest", "--headless", "--output-dir", ...],
+                "tools": ["browser_navigate", "browser_take_screenshot"],
+            },
         },
-    },
-})
+    })
+    await session.send({"prompt": _build_prompt(page)})
 ```
 
 ### Built-in Tools
@@ -74,8 +83,8 @@ This agent uses `web_fetch` to retrieve page content and relies on three additio
 
 | Tool | Purpose |
 |------|---------|
-| `CompareContentOfPage` | Compares current page text against stored snapshot using SHA-256 hashing and unified diff |
-| `SendMailTo` | Sends email notifications via SMTP with optional screenshot attachment |
+| `CompareContentOfPage` | Per-page tool — compares current page text against `snapshots/{id}.txt` using SHA-256 hashing and unified diff |
+| `SendMailTo` | Per-page tool — sends email notifications via SMTP with optional screenshot attachment (`screenshots/{id}.png`) |
 | `ReportResult` | Returns a structured Pydantic result (changes detected, added/removed lines, email status) |
 
 ### MCP Server
@@ -89,7 +98,38 @@ Content fetching uses the built-in `web_fetch` tool (not the browser), keeping b
 
 ### State Management
 
-The page snapshot (`previous_snapshot.txt`) is persisted on a separate `data` branch in the repository. This keeps the `main` branch clean while giving the agent persistent state across runs.
+Page snapshots are stored in the `snapshots/` directory — one file per page (`snapshots/{id}.txt`). These are persisted on a separate `data` branch in the repository, keeping `main` clean while giving the agent persistent state across runs.
+
+### Page Configuration
+
+Pages are configured in `pages.json` at the project root:
+
+```json
+[
+  {
+    "id": "qatar_travel_alerts",
+    "name": "Qatar Airways Travel Alerts",
+    "url": "https://www.qatarairways.com/en/travel-alerts.html",
+    "prompt_context": "Focus on flight disruptions affecting MUC → DOH → MCT on 01.04.2026.",
+    "enabled": true
+  },
+  {
+    "id": "another_page",
+    "name": "Another Page to Monitor",
+    "url": "https://example.com/status",
+    "prompt_context": "Watch for pricing changes or service interruptions.",
+    "enabled": true
+  }
+]
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Unique slug — used for snapshot filename and screenshot |
+| `name` | Yes | Human-readable name — used in email subjects and logs |
+| `url` | Yes | URL to monitor |
+| `prompt_context` | No | Custom instructions telling the AI what to focus on |
+| `enabled` | No | Set to `false` to skip (defaults to `true`) |
 
 ---
 
@@ -108,32 +148,25 @@ git commit --allow-empty -m "init data branch"
 git push origin data
 ```
 
-### 3. Set the Page URL
+### 3. Configure Pages
 
-The URL to monitor is configured via the `PAGE_URL` environment variable.
+Edit `pages.json` to add the pages you want to monitor:
 
-**Option A — Repository secret (recommended):**
-
-Go to **Settings → Secrets and variables → Actions** and add:
-
-| Secret | Value |
-|--------|-------|
-| `PAGE_URL` | The full URL of the page you want to monitor |
-
-Then add it to the workflow's `env` block:
-
-```yaml
-- name: Run agent
-  env:
-    PAGE_URL: ${{ secrets.PAGE_URL }}
-    # ... other secrets
+```json
+[
+  {
+    "id": "my_page",
+    "name": "My Important Page",
+    "url": "https://example.com/status",
+    "prompt_context": "Watch for service disruptions or pricing changes.",
+    "enabled": true
+  }
+]
 ```
 
-**Option B — Edit the default directly** in `checkPageChanges.py`:
+You can add as many pages as you need. Each page gets its own AI session, snapshot, and email notifications.
 
-```python
-URL = os.getenv("PAGE_URL", "https://example.com/your-page")
-```
+> **Backwards compatible:** If `pages.json` doesn't exist, the agent falls back to the `PAGE_URL` environment variable for single-page mode.
 
 ### 4. Configure Email (SMTP)
 
@@ -188,14 +221,16 @@ on:
     # - cron: "0 9 * * *"   # Daily at 9 AM UTC
 ```
 
-### 7. Customize the Prompt (Optional)
+### 7. Customize Behavior (Optional)
 
-The agent's behavior is controlled by the `_build_prompt()` function in `checkPageChanges.py`. You can modify it to:
+Each page's behavior is customized via the `prompt_context` field in `pages.json` — this tells the AI what to focus on when analyzing changes.
 
-- Change the language of summaries (currently German)
-- Adjust what counts as a "meaningful" change
-- Customize the email subject line and body format
-- Add additional decision logic
+For deeper customization, the `_build_prompt()` function in `checkPageChanges.py` controls:
+
+- How summaries are structured
+- What counts as a "meaningful" change
+- Email subject line format (`🔔 Change Detected — {page name}`)
+- The step-by-step workflow the agent follows
 
 ---
 
@@ -213,17 +248,32 @@ npx playwright install chrome
 
 # Configure environment
 cp .env.example .env   # or create .env manually
-# Add: PAGE_URL, COPILOT_TOKEN (or GITHUB_TOKEN), MAIL_* variables
+# Add: COPILOT_TOKEN (or GITHUB_TOKEN), MAIL_* variables
 
-# Run
+# Configure pages to monitor
+# Edit pages.json with your URLs
+
+# Run all pages
 python checkPageChanges.py
+
+# Run a single page by ID
+python checkPageChanges.py --page qatar_travel_alerts
+```
+
+### Windows Desktop Launcher
+
+A pre-built `AIScheduler.exe` is available for one-click execution. It activates the venv, runs the agent, and keeps the console open so you can read results. Pin it to your taskbar for daily use.
+
+To rebuild after changing `launcher.py`:
+```bash
+pyinstaller --onefile --console --name "AIScheduler" --icon="alert_monitor.ico" launcher.py
+copy dist\AIScheduler.exe .
 ```
 
 ### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `PAGE_URL` | No | URL to monitor (has a default fallback) |
 | `COPILOT_TOKEN` or `GITHUB_TOKEN` | Yes | GitHub token with Copilot access |
 | `MAIL_SERVER` | Yes | SMTP server hostname |
 | `MAIL_PORT` | Yes | SMTP port |
@@ -239,11 +289,16 @@ python checkPageChanges.py
 
 ```
 ai_scheduler/
-├── checkPageChanges.py           # AI agent — tools, prompt, and main loop
+├── checkPageChanges.py           # AI agent — tools, prompt, and multi-page loop
+├── pages.json                    # Page configuration (URLs, prompts, enabled flags)
 ├── requirements.txt              # Python dependencies
-├── previous_snapshot.txt         # Last known page content (persisted on data branch)
-├── screenshots/                  # Playwright screenshots (gitignored)
-├── architecture.excalidraw       # Architecture diagram (Excalidraw)
+├── snapshots/                    # Per-page snapshots (persisted on data branch)
+│   └── {page_id}.txt            #   e.g., qatar_travel_alerts.txt
+├── screenshots/                  # Per-page Playwright screenshots (gitignored)
+│   └── {page_id}.png            #   e.g., qatar_travel_alerts.png
+├── launcher.py                   # Windows .exe launcher source
+├── generate_icon.py              # Icon generator for the .exe
+├── alert_monitor.ico             # App icon
 └── .github/
     └── workflows/
         └── checkPageChanges.yml  # GitHub Actions cron workflow
@@ -256,8 +311,10 @@ ai_scheduler/
 1. The agent fetches the page content via `web_fetch` (plain text, no browser)
 2. `CompareContentOfPage` normalizes whitespace, computes SHA-256 hashes of old and new content
 3. If hashes differ → generates a unified diff, categorizes lines as **removed** or **added**
-4. The snapshot file is updated immediately
+4. The snapshot file (`snapshots/{id}.txt`) is updated immediately
 5. The AI decides: if only whitespace changed → no notification. If real content changed → screenshot + email
+
+Each page is fully independent — a failure on one page does not affect the others.
 
 ---
 
