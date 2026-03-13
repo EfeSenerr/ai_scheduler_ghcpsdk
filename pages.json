@@ -1,0 +1,9 @@
+[
+  {
+    "id": "qatar_travel_alerts",
+    "name": "Qatar Airways Travel Alerts",
+    "url": "https://www.qatarairways.com/en/travel-alerts.html",
+    "prompt_context": "The user has a flight on 01.04.2026 from Munich (MUC) via Doha (DOH) to Oman (MCT). Focus on: whether the user can still fly from MUC on 01.04.2026, route disruptions or cancellations involving MUC, Doha (DOH), or Oman (MCT), and cancellation/rebooking policies that apply to this itinerary.",
+    "enabled": true
+  }
+]

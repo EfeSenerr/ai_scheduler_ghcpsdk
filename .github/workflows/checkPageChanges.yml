@@ -19,10 +19,10 @@ jobs:
         with:
           ref: main
 
-      - name: Restore snapshot from data branch
+      - name: Restore snapshots from data branch
         run: |
           git fetch origin data
-          git checkout origin/data -- previous_snapshot.txt 2>/dev/null || echo "No snapshot yet"
+          git checkout origin/data -- snapshots/ 2>/dev/null || echo "No snapshots yet"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -54,23 +54,23 @@ jobs:
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
-          PAGE_URL: ${{ secrets.PAGE_URL }}
         run: python checkPageChanges.py
 
-      - name: Commit snapshot to data branch
+      - name: Commit snapshots to data branch
         run: |
-          if [ ! -f previous_snapshot.txt ]; then
-            echo "No snapshot to commit"
+          if [ ! -d snapshots ] || [ -z "$(ls -A snapshots/ 2>/dev/null)" ]; then
+            echo "No snapshots to commit"
             exit 0
           fi
-          # Stage snapshot, stash it, switch to data, apply, commit, push
-          cp previous_snapshot.txt /tmp/previous_snapshot.txt
+          # Copy snapshots, switch to data branch, apply, commit, push
+          cp -r snapshots/ /tmp/snapshots/
           git fetch origin data
           git checkout -f -B data origin/data
-          cp /tmp/previous_snapshot.txt previous_snapshot.txt
-          git add previous_snapshot.txt
+          mkdir -p snapshots
+          cp -r /tmp/snapshots/* snapshots/
+          git add snapshots/
           git diff --cached --quiet && echo "No changes" && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: update pageToCheck snapshot [skip ci]"
+          git commit -m "chore: update page snapshots [skip ci]"
           git push origin data
