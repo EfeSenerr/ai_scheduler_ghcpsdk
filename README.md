@@ -2,14 +2,14 @@
 
 An autonomous AI agent that monitors **multiple webpages** for content changes and sends email notifications with screenshots when differences are detected.
 
-Built with the **GitHub Copilot SDK**, **Playwright MCP**, and **GitHub Actions** — the entire agent runs serverlessly on a cron schedule with zero infrastructure to manage.
+Built with the **GitHub Copilot SDK**, **Playwright MCP**, and **GitHub Actions** — the entire agent runs serverlessly on demand with zero infrastructure to manage.
 
 ---
 
 ## How It Works
 
 ```
-GitHub Actions (daily cron) or local .exe
+GitHub Actions (manual trigger) or local .exe
   │
   ▼
 ┌─────────────────────────────────────────────────┐
@@ -209,17 +209,9 @@ COPILOT_CLI_PATH: ${{ github.workspace }}/node_modules/@github/copilot-linux-x64
 
 On macOS/local dev the SDK auto-detects the binary, so `COPILOT_CLI_PATH` is optional.
 
-### 6. Adjust the Schedule
+### 6. Run the Workflow Manually
 
-Edit `.github/workflows/checkPageChanges.yml` to change the cron frequency:
-
-```yaml
-on:
-  schedule:
-    - cron: "*/5 * * * *"   # Every 5 minutes
-    # - cron: "0 * * * *"   # Every hour
-    # - cron: "0 9 * * *"   # Daily at 9 AM UTC
-```
+Open the **Page Change Checker** workflow in GitHub Actions and select **Run workflow** when you want to check configured pages.
 
 ### 7. Customize Behavior (Optional)
 
@@ -301,7 +293,7 @@ ai_scheduler/
 ├── alert_monitor.ico             # App icon
 └── .github/
     └── workflows/
-        └── checkPageChanges.yml  # GitHub Actions cron workflow
+        └── checkPageChanges.yml  # Manually triggered GitHub Actions workflow
 ```
 
 ---
